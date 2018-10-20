@@ -1,44 +1,179 @@
 pragma solidity ^0.4.23;
 
-import 'openzeppelin-solidity/contracts/token/ERC721/ERC721.sol';
+import '../node_modules/openzeppelin-solidity/contracts/token/ERC721/ERC721.sol';
+import './strings.sol';
+import './Console.sol';
+import {IterableMapping} from './iterable_mapping.sol';
 
-contract StarNotary is ERC721 { 
+contract StarNotary is ERC721,Console {
+  using strings for *;
+  using IterableMapping for IterableMapping.itmap;
+  IterableMapping.itmap public starsForSale;
 
-    struct Star { 
-        string name; 
+  function addStarForSale(uint _key, uint _value) public {
+    starsForSale.insert(_key,_value);
+  }
+
+  function getPriceByStarTokenID(uint _tokenId) public returns(uint){
+    return starsForSale.getValueByKey(_tokenId);
+  }
+
+  struct Star {
+    string name;
+    string ra;
+    string dec;
+    string mag;
+    // StarCoordinators coordinator;
+    string starStory;
+  }
+
+  struct StarCoordinators{
+    string ra;
+    string dec;
+    string mag;
+  }
+
+  mapping(uint256 => Star) public tokenIdToStarInfo;
+  /* mapping(uint256 => uint256) public starsForSale; */
+  //a map to store coordinates info to keep uniqless ,concact
+
+  //using bytes32 to store uniqinfo generate "0.32.155+121.874+245.978" like key
+  mapping(bytes32 => uint256) public coordinatorToTokenId;
+
+  //for test
+  mapping(address => bytes32) public addressToCodBytes32;
+
+  function createStar(string _name, string _ra, string _dec,string _mag,string _starstory,uint256 _tokenId) public {
+
+    //web3.js not support return a struct inside a struct to test
+    require(
+      !checkIfStarExist(_ra,_dec,_mag),
+      "Star already Exist!"
+    );
+
+    string memory coordinateCombine = _ra.toSlice().concat(_dec.toSlice()).toSlice().concat(_mag.toSlice());
+    bytes32  bytesCoordinateCombine = stringToBytes32(coordinateCombine);
+
+    coordinatorToTokenId[bytesCoordinateCombine] = _tokenId;
+    Star memory newStar = Star(_name,_ra,_dec,_mag,_starstory);
+    tokenIdToStarInfo[_tokenId] = newStar;
+
+    addressToCodBytes32[msg.sender] = bytesCoordinateCombine;
+    _mint(msg.sender, _tokenId);
+
+  }
+
+  function checkIfStarExist(string _ra,string _dec,string _mag) view returns (bool){
+     //concate star coordinator to a string
+    string  memory coordinatorCombine = _ra.toSlice().concat(_dec.toSlice()).toSlice().concat(_mag.toSlice());
+    bytes32 bytesCoordnatorCombin = stringToBytes32(coordinatorCombine);
+
+    if(coordinatorToTokenId[bytesCoordnatorCombin] == 0){
+      return false;
+     }else{
+      return true;
+     }
+  }
+
+  function stringToBytes32(string source) internal returns (bytes32 result){
+    assembly{
+       result :=mload(add(source,32))
     }
+    
+  }
 
-    mapping(uint256 => Star) public tokenIdToStarInfo; 
-    mapping(uint256 => uint256) public starsForSale;
+  function putStarUpForSale(uint256 _tokenId, uint256 _price) public {
+    require(this.ownerOf(_tokenId) == msg.sender);
 
-    function createStar(string _name, uint256 _tokenId) public { 
-        Star memory newStar = Star(_name);
+    /* starsForSale[_tokenId] = _price; */
+    addStarForSale(_tokenId,_price);
 
-        tokenIdToStarInfo[_tokenId] = newStar;
+  }
 
-        _mint(msg.sender, _tokenId);
+//   function checkStarUniqlessByCoordinator()
+
+  function buyStar(uint256 _tokenId) public payable {
+    require(getPriceByStarTokenID(_tokenId) > 0);
+
+    uint256 starCost = getPriceByStarTokenID(_tokenId);
+    address starOwner = this.ownerOf(_tokenId);
+    require(msg.value >= starCost);
+
+    _removeTokenFrom(starOwner, _tokenId);
+    _addTokenTo(msg.sender, _tokenId);
+
+    starOwner.transfer(starCost);
+
+    if(msg.value > starCost) {
+      msg.sender.transfer(msg.value - starCost);
+      }
+  }
+
+  function mint(address to,uint256 tokenId) internal{
+    _mint(to,tokenId);
+  }
+
+  function _approve(address to, uint256 tokenId) public{
+    approve(to,tokenId);
+  }
+
+  function _safeTransferFrom(address from,address to,uint256 tokenId) public{
+    safeTransferFrom(from,to,tokenId);
+  }
+
+  function _setApprovalForAll(address to, bool approved) public {
+    setApprovalForAll(to,approved);
+  }
+
+  function _getApproved(uint256 tokenId) public view returns (address) {
+    return getApproved(tokenId);
+  }
+
+  function _isApprovedForAll(
+    address owner,
+    address operator
+  ) public view returns(bool){
+      isApprovedForAll(owner,operator);
+  }
+
+  function _ownerOf(uint256 tokenId) public view returns (address) {
+    return ownerOf(tokenId);
+  }
+
+// convert uint star token to string for showing the forsale stars.
+  function uint2str(uint i) internal pure returns (string){
+    if (i == 0) return "0";
+    uint j = i;
+    uint length;
+    while (j != 0){
+        length++;
+        j /= 10;
     }
-
-    function putStarUpForSale(uint256 _tokenId, uint256 _price) public { 
-        require(this.ownerOf(_tokenId) == msg.sender);
-
-        starsForSale[_tokenId] = _price;
+    bytes memory bstr = new bytes(length);
+    uint k = length - 1;
+    while (i != 0){
+        bstr[k--] = byte(48 + i % 10);
+        i /= 10;
     }
+    return string(bstr);
+}
 
-    function buyStar(uint256 _tokenId) public payable { 
-        require(starsForSale[_tokenId] > 0);
-        
-        uint256 starCost = starsForSale[_tokenId];
-        address starOwner = this.ownerOf(_tokenId);
-        require(msg.value >= starCost);
+  function starsForSale() public returns (string) {
+    string memory result = "";
+     for(uint i = IterableMapping.iterate_start(starsForSale); IterableMapping.iterate_valid(starsForSale, i); i = IterableMapping.iterate_next(starsForSale, i)){
+         (uint key, uint value) = IterableMapping.iterate_get(starsForSale, i);
+         string memory starTokenId = uint2str(key);
+         result = result.toSlice().concat(starTokenId.toSlice()).toSlice().concat('_'.toSlice());
+     }
+     return result;
+  }
 
-        _removeTokenFrom(starOwner, _tokenId);
-        _addTokenTo(msg.sender, _tokenId);
-        
-        starOwner.transfer(starCost);
+  function _starsForSale(uint _tokenId)  view returns (uint){
+    return starsForSale.getValueByKey(_tokenId);
+  }
 
-        if(msg.value > starCost) { 
-            msg.sender.transfer(msg.value - starCost);
-        }
-    }
+  function _tokenIdToStarInfo(uint _tokenId) view returns (string,string,string,string,string){
+    Star memory star = tokenIdToStarInfo[_tokenId];
+    return (star.name,star.starStory,star.ra,star.dec,star.mag);
+  }
 }
