@@ -829,14 +829,16 @@
                 
             );
             // Grab the contract at specified deployed address with the interface defined by the ABI
-            var starNotary = StarNotary.at('0x6435ff5cc9400f623509445a8802afb3988c4ae1');
+            var starNotary = StarNotary.at('0x6435Ff5CC9400F623509445A8802AFb3988c4aE1');
             
 
-           function getStarInfoByTokenId(){
+
+
+           async function getStarInfoByTokenId(){
                var tokenId = document.getElementById("tokenId").value;
                console.log(tokenId);
                if(tokenId != ''&& tokenId != undefined){
-                   web3.eth.getAccounts(function(error,accounts){
+                    web3.eth.getAccounts(function(error,accounts){
                        if(error){
                            console.log(error);
                            return
@@ -876,7 +878,7 @@
                 })
             }
 
-            function createStarButtonClicked() { 
+          async  function createStarButtonClicked() { 
                 var star_dec = document.getElementById("starinfo_dec").value;
                 var star_mag = document.getElementById("starinfo_mag").value;
                 var star_cent = document.getElementById("starinfo_cent").value;
